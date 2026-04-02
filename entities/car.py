@@ -1,13 +1,24 @@
 import pygame
 import math
+import os
 from settings import *
 from utils.geometry import get_diamond_footprint
 
+ASSETS_DIR = "assets"
+
 class Car(pygame.sprite.Sprite):
+    ASSET_PATH = os.path.join(ASSETS_DIR, "generic_car.png")
+
     def __init__(self, x, y, plate):
         super().__init__()
-        self.image = pygame.Surface((64, 32))
-        self.image.fill((100, 100, 100)) # Gray
+        asset = os.path.join(ASSETS_DIR, "generic_car.png")
+        if os.path.exists(asset):
+            self.original_image = pygame.image.load(asset).convert_alpha()
+            self.original_image = pygame.transform.scale(self.original_image, (64, 32))
+        else:
+            self.original_image = pygame.Surface((64, 32))
+            self.original_image.fill((100, 100, 100))
+        self.image = self.original_image
         self.rect = self.image.get_rect(center=(x, y))
         self.hitbox = get_diamond_footprint(self.rect)
         
@@ -56,6 +67,11 @@ class Car(pygame.sprite.Sprite):
         
         self.rect.x += dx
         self.rect.y += dy
+        
+        # Rotate sprite to match angle
+        center = self.rect.center
+        self.image = pygame.transform.rotate(self.original_image, -self.angle)
+        self.rect = self.image.get_rect(center=center)
         self.hitbox = get_diamond_footprint(self.rect)
 
     def _apply_friction(self, dt):
@@ -69,7 +85,16 @@ class Car(pygame.sprite.Sprite):
 class AutonomousCar(Car):
     def __init__(self, x, y, plate, player):
         super().__init__(x, y, plate)
-        self.image.fill((10, 10, 15)) # Deep black tint
+        # Override with the black sedan asset
+        asset = os.path.join(ASSETS_DIR, "car_black_sedan.png")
+        if os.path.exists(asset):
+            self.original_image = pygame.image.load(asset).convert_alpha()
+            self.original_image = pygame.transform.scale(self.original_image, (64, 32))
+        else:
+            self.original_image = pygame.Surface((64, 32), pygame.SRCALPHA)
+            self.original_image.fill((10, 10, 15))
+        self.image = self.original_image
+        self.rect = self.image.get_rect(center=(x, y))
         self.player = player
         self.creep_speed = 30
         self.doors_locked = True

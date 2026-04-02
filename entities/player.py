@@ -1,13 +1,20 @@
 import pygame
+import os
 from settings import *
 from utils.geometry import get_diamond_footprint
-from settings import *
 
 class Player(pygame.sprite.Sprite):
+    ASSET_PATH = os.path.join("assets", "player.png")
+
     def __init__(self, x, y):
         super().__init__()
-        self.image = pygame.Surface((32, 64))
-        self.image.fill(WHITE)
+        if os.path.exists(self.ASSET_PATH):
+            self.original_image = pygame.image.load(self.ASSET_PATH).convert_alpha()
+            self.original_image = pygame.transform.scale(self.original_image, (32, 64))
+        else:
+            self.original_image = pygame.Surface((32, 64))
+            self.original_image.fill(WHITE)
+        self.image = self.original_image
         self.rect = self.image.get_rect(center=(x, y))
         self.speed = 200
         self.hitbox = get_diamond_footprint(self.rect)
