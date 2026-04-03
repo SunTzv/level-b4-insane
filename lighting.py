@@ -2,44 +2,79 @@ import pygame
 from settings import *
 
 class LightingManager:
-    # Darkness opacity per game state (0 = fully bright, 255 = pitch black)
-    OPACITY = {
-        'NORMAL':    80,   # Day 1-2: dim but playable — overhead fluorescents
-        'DECAY':    160,   # Day 3-4: noticeably darker, shadows stretch
-        'NIGHTMARE': 210,  # Day 5:   near-total darkness
+    """
+    Fast lighting using BLEND_MULT instead of SRCALPHA surfaces.
+
+    How it works:
+      1. Fill darkness surface with an ambient RGB colour (not alpha — regular surface).
+      2. Blit pre-rendered white-to-black radial gradients onto it with BLEND_ADD
+         (adds brightness where lights are).
+      3. Blit the darkness surface onto the screen with BLEND_MULT.
+         BLEND_MULT: result = screen_pixel * darkness_pixel / 255
+         → black (0)   in darkness = screen goes black
+         → white (255) in darkness = screen pixel unchanged
+         → grey  (160) in darkness = screen dimmed by ~37%
+
+    Why this is fast:
+      • No SRCALPHA surface — fill() is ~10x faster on regular surfaces.
+      • BLEND_MULT / BLEND_ADD are implemented in C inside SDL.
+      • Light mask generated once and cached — never re-drawn.
+      • Circle step=4 during mask generation (still smooth, 4x faster to build).
+    """
+
+    # RGB brightness of the ambient darkness layer per game state.
+    # Higher = brighter (less dark).
+    AMBIENT = {
+        'NORMAL':    (155, 155, 155),  # dim fluorescent glow — playable
+        'DECAY':     (70,  70,  70),   # oppressive, limited visibility
+        'NIGHTMARE': (18,  18,  18),   # near-total darkness
     }
 
     def __init__(self, width, height):
-        self.darkness = pygame.Surface((width, height), pygame.SRCALPHA)
-        self.light_cache = {}
+        self.width  = width
+        self.height = height
+        # Regular surface — NO SRCALPHA flag
+        self.darkness = pygame.Surface((width, height))
+        self.light_cache: dict[int, pygame.Surface] = {}
 
-    def _get_light_mask(self, radius):
-        """Return a cached circular gradient surface for a given radius."""
+    # ------------------------------------------------------------------
+    def _get_light_mask(self, radius: int) -> pygame.Surface:
+        """Return a cached radial gradient — white centre, black edge."""
         if radius in self.light_cache:
             return self.light_cache[radius]
 
-        surf = pygame.Surface((radius * 2, radius * 2), pygame.SRCALPHA)
-        for r in range(radius, 0, -1):
-            # Smooth quadratic falloff — bright in center, fades at edge
-            t = r / radius
-            alpha = int(255 * (t * t))
-            pygame.draw.circle(surf, (255, 255, 255, alpha), (radius, radius), r)
+        diam = radius * 2
+        surf = pygame.Surface((diam, diam))
+        surf.fill((0, 0, 0))
+
+        # Draw rings from outside-in, each ring brighter than the last.
+        # step=4 → ~4× faster than step=1, gradient still looks smooth.
+        for r in range(radius, 0, -4):
+            t = 1.0 - (r / radius)           # 0 at edge → 1 at centre
+            b = int(255 * (t ** 1.4))        # power-curve falloff
+            c = (b, b, b)
+            pygame.draw.circle(surf, c, (radius, radius), r)
 
         self.light_cache[radius] = surf
         return surf
 
-    def draw(self, screen, offset, lights, state_manager):
-        opacity = self.OPACITY.get(state_manager.state.name, 80)
-        self.darkness.fill((0, 0, 0, opacity))
+    # ------------------------------------------------------------------
+    def draw(self, screen: pygame.Surface, offset: pygame.math.Vector2,
+             lights: list, state_manager) -> None:
+
+        ambient = self.AMBIENT.get(state_manager.state.name, self.AMBIENT['NORMAL'])
+        self.darkness.fill(ambient)
 
         for light in lights:
-            pos = light['pos'] - offset
+            pos    = light['pos'] - offset
             radius = light['radius']
-            mask = self._get_light_mask(radius)
+            mask   = self._get_light_mask(radius)
+            # BLEND_ADD: adds the bright centre to the darkness layer
             self.darkness.blit(
                 mask,
-                (pos.x - radius, pos.y - radius),
-                special_flags=pygame.BLEND_RGBA_SUB
+                (int(pos.x - radius), int(pos.y - radius)),
+                special_flags=pygame.BLEND_ADD,
             )
 
-        screen.blit(self.darkness, (0, 0))
+        # BLEND_MULT: multiplies screen by darkness — black=off, white=pass-through
+        screen.blit(self.darkness, (0, 0), special_flags=pygame.BLEND_MULT)
