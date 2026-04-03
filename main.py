@@ -103,37 +103,51 @@ class Game:
                 
         # Lighting calculation
         self.lights = []
+        state = self.state_manager.state.name
+
+        # Ambient overhead light — always on in NORMAL, dimmer in DECAY, off in NIGHTMARE
+        if not self.player.in_car:
+            if state == 'NORMAL':
+                self.lights.append({'pos': pygame.math.Vector2(self.player.rect.center), 'radius': 200})
+            elif state == 'DECAY':
+                self.lights.append({'pos': pygame.math.Vector2(self.player.rect.center), 'radius': 120})
+
+        # Flashlight (Day 3+, toggled with F)
         if self.player.flashlight_on and not self.player.in_car:
-            self.lights.append({'pos': pygame.math.Vector2(self.player.rect.center), 'radius': 150})
-        if self.player.in_car:
-            self.lights.append({'pos': pygame.math.Vector2(self.player.current_car.rect.center), 'radius': 250})
-            
+            self.lights.append({'pos': pygame.math.Vector2(self.player.rect.center), 'radius': 220})
+
+        # Car headlights
+        if self.player.in_car and self.player.current_car:
+            self.lights.append({'pos': pygame.math.Vector2(self.player.current_car.rect.center), 'radius': 300})
+
         # Paranoia
-        in_light = False
-        for light in self.lights:
-            if pygame.math.Vector2(self.player.rect.center).distance_to(light['pos']) < light['radius']:
-                in_light = True
-                
+        in_light = any(
+            pygame.math.Vector2(self.player.rect.center).distance_to(l['pos']) < l['radius']
+            for l in self.lights
+        )
         if not in_light and not self.player.in_car:
             self.state_manager.paranoia_float += dt * 5
         else:
             self.state_manager.paranoia_float -= dt * 10
             self.state_manager.paranoia_float = max(0.0, self.state_manager.paranoia_float)
 
+
     def draw(self):
         self.screen.fill(BLACK)
-        
+
         target = self.player.current_car if self.player.in_car else self.player
-        
-        # 1. Floor tiles (drawn first, behind everything)
-        self.tilemap.draw(self.screen, self.all_sprites.offset)
-        
-        # 2. Y-sorted sprites (player, cars)
+
+        # 1. Floor tiles — flat ground, drawn behind everything
+        self.tilemap.draw_floor(self.screen, self.all_sprites.offset)
+
+        # 2. Y-sorted sprites (player, cars) + wall/pillar object tiles
         self.all_sprites.custom_draw(target)
-        
+        self.tilemap.draw_objects(self.screen, self.all_sprites.offset)
+
         # 3. Darkness / lighting overlay
         self.lighting.draw(self.screen, self.all_sprites.offset, self.lights, self.state_manager)
-        
+
+
         # 4. UI on top of everything
         self.ui.draw(self.screen)
         
