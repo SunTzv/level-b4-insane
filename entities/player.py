@@ -5,6 +5,9 @@ from utils.geometry import get_diamond_footprint
 
 class Player(pygame.sprite.Sprite):
     ASSET_PATH = os.path.join("assets", "player.png")
+    # Foot rect size relative to sprite (used for collision checks)
+    FOOT_W = 14
+    FOOT_H = 10
 
     def __init__(self, x, y):
         super().__init__()
@@ -18,13 +21,13 @@ class Player(pygame.sprite.Sprite):
         self.rect   = self.image.get_rect(center=(x, y))
         self.speed  = 120
         self.hitbox = get_diamond_footprint(self.rect)
-        self.in_car      = False
-        self.current_car = None
+        self.in_car       = False
+        self.current_car  = None
         self.flashlight_on = False
-        self._tilemap    = None   # set by Game after TileMap is created
+        self._collision_rects = []   # set by Game via set_tilemap()
 
     def set_tilemap(self, tilemap):
-        self._tilemap = tilemap
+        self._collision_rects = tilemap.collision_rects
 
     # -----------------------------------------------------------------------
     def update(self, dt):
@@ -40,29 +43,31 @@ class Player(pygame.sprite.Sprite):
         if keys[pygame.K_a] or keys[pygame.K_LEFT]:  dx -= 1
         if keys[pygame.K_d] or keys[pygame.K_RIGHT]: dx += 1
 
-        # Diagonal normalisation
         if dx and dy:
             dx *= 0.7071
             dy *= 0.7071
 
         step = self.speed * dt
 
-        # --- X axis ---
+        # Slide along X, then Y separately so corners feel smooth
         new_x = self.rect.x + dx * step
-        if not self._is_blocked(new_x, self.rect.y):
+        if not self._collides(new_x, self.rect.y):
             self.rect.x = new_x
 
-        # --- Y axis ---
         new_y = self.rect.y + dy * step
-        if not self._is_blocked(self.rect.x, new_y):
+        if not self._collides(self.rect.x, new_y):
             self.rect.y = new_y
 
         self.hitbox = get_diamond_footprint(self.rect)
 
-    def _is_blocked(self, rx, ry):
-        """Check the player's foot-point against solid tiles."""
-        if self._tilemap is None:
-            return False
+    def _foot_rect(self, rx, ry):
+        """A small rect at the bottom-centre of the sprite — the "ground" point."""
         cx = rx + self.rect.width  // 2
-        cy = ry + self.rect.height - 4   # foot point
-        return self._tilemap.is_solid_at(cx, cy)
+        cy = ry + self.rect.height - self.FOOT_H
+        return pygame.Rect(cx - self.FOOT_W // 2, cy,
+                           self.FOOT_W, self.FOOT_H)
+
+    def _collides(self, rx, ry):
+        """Return True if the foot rect overlaps any solid tile rect."""
+        foot = self._foot_rect(rx, ry)
+        return any(foot.colliderect(r) for r in self._collision_rects)

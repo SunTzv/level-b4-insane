@@ -6,11 +6,6 @@ from settings import *
 def grid_to_screen(col, row):
     return (col - row) * TILE_W // 2, (col + row) * TILE_H // 2
 
-def screen_to_grid(sx, sy):
-    col = (sx / (TILE_W / 2) + sy / (TILE_H / 2)) / 2
-    row = (sy / (TILE_H / 2) - sx / (TILE_W / 2)) / 2
-    return int(col), int(row)
-
 # ---------------------------------------------------------------------------
 TILE_DEFS = {
     'C': {'path': os.path.join('assets', 'floor_concrete.png'),              'size': (TILE_W, TILE_H), 'z': 0, 'solid': False},
@@ -24,83 +19,83 @@ TILE_DEFS = {
 }
 
 FALLBACK = {
-    'C': (60,60,60),'P': (70,70,50),'W': (80,80,80),
-    'I': (90,90,90),'X': (180,40,40),'O': (40,180,40),'E': (100,100,130),
+    'C': (55,55,55), 'P': (65,65,45), 'W': (75,75,75),
+    'I': (85,85,85), 'X': (170,35,35), 'O': (35,170,35), 'E': (90,90,120),
 }
 
 # ---------------------------------------------------------------------------
-# Map  — 26 cols × 14 rows
-# Guard station: area around col 8-9, row 11 (marked with 'I' pillar at col 7)
-# Barrier: col 11, row 13 (bottom wall)
-# Player spawns at col 9, row 11 — right next to guard pillar, adjacent to barrier
+# Map — 26 cols × 14 rows
+#
+# STRUCTURE:
+#   Row 0:     Outer top wall
+#   Row 1:     Pillar support row (I at cols 2,6,10,14,18,22)
+#   Rows 2-3:  Top parking bays   (all P — no pillars inside)
+#   Row 4:     Concrete separator + drive entry to top bays
+#   Rows 5-7:  Main drive lane
+#   Row 8:     Concrete separator + drive entry to bottom bays
+#   Rows 9-10: Bottom parking bays (all P)
+#   Row 11:    Pillar support row
+#   Row 12:    Guard station approach (open concrete)
+#   Row 13:    Bottom wall + barrier at col 11
+#
+# Pillar cols: 2, 6, 10, 14, 18, 22  (evenly spaced across inner 24 cols)
 # ---------------------------------------------------------------------------
+
+# Helper: build a 26-char row string
+def _row(inner_24):
+    assert len(inner_24) == 24, f"Inner must be 24 chars, got {len(inner_24)}: '{inner_24}'"
+    return 'W' + inner_24 + 'W'
+
+_PILLAR_ROW = 'CICCCICCCICCCICCCICCCICC'   # pillars at positions 0,4,8,12,16,20 within inner
+_park_row   = 'C' + 'P' * 22 + 'C'         # full-width parking lane
+
 LAYOUT = [
-    "WWWWWWWWWWWWWWWWWWWWWWWWWW",  # 0  top wall
-    "WCCCCCCCCCCCCCCCCCCCCCCCCW",  # 1
-    "WCPPICPPICPPICPPICPPICPPCW",  # 2  top parking bays
-    "WCPPICPPICPPICPPICPPICPPCW",  # 3
-    "WCCCCCCCCCCCCCCCCCCCCCCCCW",  # 4
-    "WCCCCCCCCCCCCCCCCCCCCCCCCW",  # 5  main drive lane
-    "WCCCCCCCCCCCCCCCCCCCCCCCCW",  # 6
-    "WCCCCCCCCCCCCCCCCCCCCCCCCW",  # 7
-    "WCPPICPPICPPICPPICPPICPPCW",  # 8  bottom parking bays
-    "WCPPICPPICPPICPPICPPICPPCW",  # 9
-    "WCCCCCCCCCCCCCCCCCCCCCCCCW",  # 10
-    "WCCCCCCCCCCCCCCCCCCCCCCCCW",  # 11 approach lane  ← player + guard area
-    "WCCCCCCICCCCCCCCCCCCCCCCW",   # 12 guard pillar 'I' at col 7
-    "WWWWWWWWWWWXWWWWWWWWWWWWWW",  # 13 bottom wall, barrier 'X' at col 11
+    _row('W' * 24),                          # 0  outer top (double wall for height)
+    _row(_PILLAR_ROW),                       # 1  top pillar support row
+    _row(_park_row),                         # 2  top parking bay (row A)
+    _row(_park_row),                         # 3  top parking bay (row B)  ← 2 deep ✓
+    _row('C' * 24),                          # 4  separator / approach to top bays
+    _row('C' * 24),                          # 5  main drive lane
+    _row('C' * 24),                          # 6  main drive lane
+    _row('C' * 24),                          # 7  main drive lane
+    _row('C' * 24),                          # 8  separator / approach to bottom bays
+    _row(_park_row),                         # 9  bottom parking bay (row A)
+    _row(_park_row),                         # 10 bottom parking bay (row B)  ← 2 deep ✓
+    _row(_PILLAR_ROW),                       # 11 bottom pillar support row
+    _row('C' * 24),                          # 12 guard station area (open!)
+    'W' * 11 + 'X' + 'W' * 14,              # 13 bottom wall + barrier at col 11
 ]
 
-# Guard station — player spawns here (open concrete, pillar to the left)
-PLAYER_SPAWN_GRID = (9, 11)
+# ---------------------  validate all rows are 26 chars  --------------------
+for _i, _r in enumerate(LAYOUT):
+    assert len(_r) == 26, f"Row {_i} is {len(_r)} chars (expected 26): '{_r}'"
 
-# Barrier tile position
+# ---------------------------------------------------------------------------
+# Constants used by main.py
+# ---------------------------------------------------------------------------
+PLAYER_SPAWN_GRID = (9, 12)      # guard station — open concrete, next to barrier
 BARRIER_GRID      = (11, 13)
+ENTRY_COL         = 11
 
-# Lane col that the entry uses
-ENTRY_COL = 11
+_P_COLS = [2, 6, 10, 14, 18, 22]   # spot columns (left edge of each 3-ish-wide space)
 
-# Parking spot grid column anchors (left col of each 2-tile wide bay)
-# Row "WCPPICPPICPPICPPICPPICPPCW":
-#   P at: 2,3 | 6,7 | 10,11 | 14,15 | 18,19 | 22,23
-_P_COLS = [2, 6, 10, 14, 18, 22]
-
-# 4-waypoint paths for each of the 12 parking spots
-def make_parking_paths():
-    paths = []
-    wp0_grid = (ENTRY_COL, 12)   # just inside barrier
-
-    for col in _P_COLS:
-        # Top bay (row 3): enter → main lane row 6 → target col → park row 3
-        wps = [
-            wp0_grid,
-            (ENTRY_COL, 6),
-            (col, 6),
-            (col, 3),
-        ]
-        paths.append([(c, r) for c, r in wps])
-
-    for col in _P_COLS:
-        # Bottom bay (row 8): enter → lower lane row 10 → target col → park row 8
-        wps = [
-            wp0_grid,
-            (ENTRY_COL, 10),
-            (col, 10),
-            (col, 8),
-        ]
-        paths.append([(c, r) for c, r in wps])
-
-    return paths
-
-PARKING_PATHS = make_parking_paths()   # list of 12 paths, each a list of (col,row)
-
-# Convenience: world-centre of a tile
 def tile_center(col, row):
     sx, sy = grid_to_screen(col, row)
     return pygame.math.Vector2(sx + TILE_W // 2, sy + TILE_H // 2)
 
-# Where cars wait outside the barrier
-ENTRY_WAIT_POS = tile_center(ENTRY_COL, 15)
+def make_parking_paths():
+    """4-waypoint drive path for each of 12 parking spots."""
+    paths = []
+    wp0 = (ENTRY_COL, 12)   # just inside barrier
+    for col in _P_COLS:     # top bays: park in row 2
+        paths.append([wp0, (ENTRY_COL, 6), (col, 6), (col, 2)])
+    for col in _P_COLS:     # bottom bays: park in row 10
+        paths.append([wp0, (ENTRY_COL, 8), (col, 8), (col, 10)])
+    return paths
+
+PARKING_PATHS   = make_parking_paths()
+ENTRY_WAIT_POS  = tile_center(ENTRY_COL, 15)   # outside the lot
+
 
 # ---------------------------------------------------------------------------
 def _make_fallback(key, w, h):
@@ -116,73 +111,77 @@ def _make_fallback(key, w, h):
 class TileMap:
     def __init__(self):
         self._load_images()
-        self.floor_tiles    = []
-        self.object_tiles   = []
+        self.floor_tiles     = []
+        self.object_tiles    = []
         self.collision_rects = []
-        # Dynamic tile override: {(col,row): char} — for barrier open/close
-        self.dynamic = {}
-        self._build_tiles()
+        self.dynamic         = {}
+        self._build()
 
-    def set_tile(self, col, row, char):
-        """Change a tile at runtime (e.g. open/close barrier)."""
-        self.dynamic[(col, row)] = char
-
+    # ------------------------------------------------------------------
     def _load_images(self):
         self.images = {}
         for key, defn in TILE_DEFS.items():
             if defn is None: continue
             w, h = defn['size']
-            img = (pygame.image.load(defn['path']).convert_alpha()
-                   if os.path.exists(defn['path'])
-                   else _make_fallback(key, w, h))
-            self.images[key] = pygame.transform.scale(img, (w, h))
+            path = defn['path']
+            if os.path.exists(path):
+                img = pygame.image.load(path).convert_alpha()
+                img = pygame.transform.scale(img, (w, h))
+            else:
+                img = _make_fallback(key, w, h)
 
-    def _build_tiles(self):
+            # Pillar: crop bottom ~20 px to remove baked-in ground shadow
+            if key == 'I':
+                crop_h = h - 20
+                cropped = pygame.Surface((w, crop_h), pygame.SRCALPHA)
+                cropped.blit(img, (0, 0), area=(0, 0, w, crop_h))
+                img = cropped
+
+            self.images[key] = img
+
+    # ------------------------------------------------------------------
+    def _build(self):
         for r, row_str in enumerate(LAYOUT):
             for c, char in enumerate(row_str):
-                self._register_tile(c, r, char)
+                defn = TILE_DEFS.get(char)
+                if defn is None: continue
+                img = self.images.get(char)
+                if img is None: continue
+
+                w, h = img.get_size()   # use actual cropped size
+                sx, sy = grid_to_screen(c, r)
+                pos = pygame.math.Vector2(sx, sy)
+
+                if defn['z'] == 0:
+                    self.floor_tiles.append((img, pos))
+                else:
+                    sort_y = sy + h
+                    self.object_tiles.append((img, pos, sort_y))
+                    if defn['solid']:
+                        # Collision rect = ground diamond footprint of this tile
+                        gx = sx + TILE_W // 2          # horizontal centre
+                        gy = sy + TILE_H // 2           # isometric ground centre
+                        rw, rh = TILE_W, TILE_H // 2
+                        self.collision_rects.append(
+                            pygame.Rect(gx - rw // 2, gy - rh // 2, rw, rh))
+
         self.object_tiles.sort(key=lambda t: t[2])
 
-    def _register_tile(self, c, r, char):
-        defn = TILE_DEFS.get(char)
-        if defn is None: return
-        img = self.images.get(char)
-        if img is None: return
-        w, h = defn['size']
-        sx, sy = grid_to_screen(c, r)
-        pos = pygame.math.Vector2(sx, sy)
-        if defn['z'] == 0:
-            self.floor_tiles.append((img, pos))
-        else:
-            self.object_tiles.append((img, pos, sy + h))
-            if defn['solid']:
-                cx, cy = sx + w//2, sy + TILE_H//2
-                self.collision_rects.append(
-                    pygame.Rect(cx - TILE_W//2, cy - TILE_H//4, TILE_W, TILE_H//2))
-
-    def is_solid_at(self, wx, wy):
-        col, row = screen_to_grid(wx, wy)
-        char = self.dynamic.get((col, row))
-        if char is None:
-            if row < 0 or row >= len(LAYOUT): return True
-            if col < 0 or col >= len(LAYOUT[row]): return True
-            char = LAYOUT[row][col]
-        defn = TILE_DEFS.get(char)
-        return defn is not None and defn.get('solid', False)
+    # ------------------------------------------------------------------
+    def set_tile(self, col, row, char):
+        self.dynamic[(col, row)] = char
 
     def draw_floor(self, surface, offset):
         for img, pos in self.floor_tiles:
             surface.blit(img, pos - offset)
 
     def draw_objects(self, surface, offset):
-        # Merge static + dynamic object tiles
         for img, pos, _ in self.object_tiles:
             surface.blit(img, pos - offset)
-        # Draw dynamic tile overrides on top
         for (c, r), char in self.dynamic.items():
             defn = TILE_DEFS.get(char)
-            if defn is None or defn['z'] != 1: continue
-            img = self.images.get(char)
-            if img is None: continue
-            sx, sy = grid_to_screen(c, r)
-            surface.blit(img, pygame.math.Vector2(sx, sy) - offset)
+            if defn and defn.get('z') == 1:
+                img = self.images.get(char)
+                if img:
+                    sx, sy = grid_to_screen(c, r)
+                    surface.blit(img, pygame.math.Vector2(sx, sy) - offset)
