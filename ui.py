@@ -61,13 +61,13 @@ class UI:
     # -- HUD -----------------------------------------------------------
     def _draw_hud(self, surface, car_count, cars_needed, shift_over):
         pad = 6
-        day_str  = f"DAY  {self.state_manager.day}"
-        car_str  = f"CARS {car_count:02d}/{cars_needed:02d}"
-        para_str = f"P: {int(self.state_manager.paranoia_float):03d}"
-        shift_str = "** SHIFT OVER **" if shift_over else "SHIFT IN PROGRESS"
-
-        for i, text in enumerate([day_str, car_str, para_str, shift_str]):
-            color = (0, 255, 80) if i < 3 else (255, 80, 80) if shift_over else (180, 180, 180)
+        lines = [
+            (f"DAY  {self.state_manager.day}",         (0, 255, 80)),
+            (f"CARS {car_count:02d}/{cars_needed:02d}", (0, 255, 80)),
+            ("** SHIFT OVER **" if shift_over else "SHIFT IN PROGRESS",
+             (255, 80, 80) if shift_over else (160, 160, 160)),
+        ]
+        for i, (text, color) in enumerate(lines):
             surf = self.font_small.render(text, True, color)
             surface.blit(surf, (pad, pad + i * 14))
 

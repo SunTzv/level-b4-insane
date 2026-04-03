@@ -6,6 +6,12 @@ from settings import *
 def grid_to_screen(col, row):
     return (col - row) * TILE_W // 2, (col + row) * TILE_H // 2
 
+def screen_to_grid(wx, wy):
+    """Precise inverse of grid_to_screen — uses round() not int() to avoid edge drift."""
+    u = wx / (TILE_W / 2)
+    v = wy / (TILE_H / 2)
+    return round((u + v) / 2), round((v - u) / 2)
+
 # ---------------------------------------------------------------------------
 TILE_DEFS = {
     'C': {'path': os.path.join('assets', 'floor_concrete.png'),              'size': (TILE_W, TILE_H), 'z': 0, 'solid': False},
@@ -167,9 +173,19 @@ class TileMap:
 
         self.object_tiles.sort(key=lambda t: t[2])
 
-    # ------------------------------------------------------------------
     def set_tile(self, col, row, char):
         self.dynamic[(col, row)] = char
+
+    def is_solid_at(self, wx, wy):
+        col, row = screen_to_grid(wx, wy)
+        # Dynamic override first (e.g. barrier open/closed)
+        char = self.dynamic.get((col, row))
+        if char is None:
+            if row < 0 or row >= len(LAYOUT): return True
+            if col < 0 or col >= len(LAYOUT[row]): return True
+            char = LAYOUT[row][col]
+        defn = TILE_DEFS.get(char)
+        return defn is not None and defn.get('solid', False)
 
     def draw_floor(self, surface, offset):
         for img, pos in self.floor_tiles:

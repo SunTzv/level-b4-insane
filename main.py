@@ -22,7 +22,7 @@ BARRIER_INTERACT_DIST = 80   # world pixels
 
 class Game:
     CARS_TO_END = random.randint(10, 15)
-    QUEUE_INTERVAL = (18.0, 30.0)     # seconds between cars arriving at barrier
+    QUEUE_INTERVAL = (5.0, 10.0)     # seconds between cars arriving at barrier
 
     def __init__(self):
         pygame.init()
@@ -50,7 +50,7 @@ class Game:
         self.npc_cars     = []
         self.waiting_car  = None    # car sitting at barrier
         self.cars_arrived = 0       # cars that have entered the lot
-        self.queue_timer  = 5.0     # first car arrives quickly
+        self.queue_timer  = 3.0     # first car arrives after 3 seconds
         self.shift_over   = False
         self.anomaly_car  = None
 
