@@ -8,6 +8,7 @@ from camera import CameraGroup
 from ui import UI
 from state_manager import GameState
 from lighting import LightingManager
+from entities.level import TileMap
 
 class Game:
     def __init__(self):
@@ -33,6 +34,7 @@ class Game:
         self.lighting = LightingManager(WIDTH, HEIGHT)
         self.lights = []
         self.player.flashlight_on = False
+        self.tilemap = TileMap()
 
     def run(self):
         while True:
@@ -122,10 +124,17 @@ class Game:
         self.screen.fill(BLACK)
         
         target = self.player.current_car if self.player.in_car else self.player
+        
+        # 1. Floor tiles (drawn first, behind everything)
+        self.tilemap.draw(self.screen, self.all_sprites.offset)
+        
+        # 2. Y-sorted sprites (player, cars)
         self.all_sprites.custom_draw(target)
         
+        # 3. Darkness / lighting overlay
         self.lighting.draw(self.screen, self.all_sprites.offset, self.lights, self.state_manager)
         
+        # 4. UI on top of everything
         self.ui.draw(self.screen)
         
         pygame.display.flip()
