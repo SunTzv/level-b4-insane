@@ -4,58 +4,105 @@ from settings import *
 
 class UI:
     def __init__(self, state_manager):
-        self.state_manager = state_manager
-        # Fallback to monospace if Courier New isn't available
-        self.font = pygame.font.SysFont("Courier New", 24, bold=True)
-        self.logbook_open = False
-        self.current_input = ""
-        self.logs = []
-        
-        self.terminal_rect = pygame.Rect(WIDTH // 4, HEIGHT // 4, WIDTH // 2, HEIGHT // 2)
-    
+        self.state_manager  = state_manager
+        self.font_large = pygame.font.SysFont("Courier New", 14, bold=True)
+        self.font_small = pygame.font.SysFont("Courier New", 11, bold=True)
+        self.logbook_open   = False
+        self.current_input  = ""
+        self.logs           = []
+        self.terminal_rect  = pygame.Rect(RENDER_W // 4, RENDER_H // 4,
+                                          RENDER_W // 2, RENDER_H // 2)
+        # Dialogue
+        self.dialogue_lines  = []
+        self.dialogue_timer  = 0.0
+        self.dialogue_active = False
+
+    # ------------------------------------------------------------------
+    def show_dialogue(self, text: str, duration: float = 6.0):
+        self.dialogue_lines  = text.split('\n')
+        self.dialogue_timer  = duration
+        self.dialogue_active = True
+
     def toggle_logbook(self):
         self.logbook_open = not self.logbook_open
-    
+
+    # ------------------------------------------------------------------
     def handle_event(self, event):
         if not self.logbook_open:
             return False
-            
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_RETURN:
-                if self.current_input.strip() != "":
-                    self.logs.append(self.current_input)
+                if self.current_input.strip():
+                    self.logs.append(self.current_input.strip().upper())
                     self.current_input = ""
             elif event.key == pygame.K_BACKSPACE:
                 self.current_input = self.current_input[:-1]
-            elif event.key != pygame.K_TAB:
-                if event.unicode.isprintable():
-                    self.current_input += event.unicode
+            elif event.key != pygame.K_TAB and event.unicode.isprintable():
+                self.current_input += event.unicode
             return True
         return False
-                    
-    def draw(self, screen):
+
+    # ------------------------------------------------------------------
+    def update(self, dt):
+        if self.dialogue_active:
+            self.dialogue_timer -= dt
+            if self.dialogue_timer <= 0:
+                self.dialogue_active = False
+
+    # ------------------------------------------------------------------
+    def draw(self, surface, car_count=0, cars_needed=10, shift_over=False):
+        """Draw onto the render surface (RENDER_W x RENDER_H)."""
+        self._draw_hud(surface, car_count, cars_needed, shift_over)
         if self.logbook_open:
-            # UI Glitch / Paranoia effect
-            jx, jy = 0, 0
-            if self.state_manager.paranoia_float > 20: # Example threshold
-                intensity = min(15, int((self.state_manager.paranoia_float - 20) / 2))
-                jx = random.randint(-intensity, intensity)
-                jy = random.randint(-intensity, intensity)
-            
-            draw_rect = self.terminal_rect.move(jx, jy)
-            
-            pygame.draw.rect(screen, (0, 0, 40), draw_rect)
-            pygame.draw.rect(screen, (200, 200, 200), draw_rect, 4)
-            
-            title_surf = self.font.render(f"B4 PARKING LOG - DAY {self.state_manager.day}", True, (0, 255, 0))
-            screen.blit(title_surf, (draw_rect.x + 10, draw_rect.y + 10))
-            
-            y_offset = 50
-            start_index = max(0, len(self.logs) - 8)
-            for log in self.logs[start_index:]:
-                log_surf = self.font.render("> " + log, True, (0, 255, 0))
-                screen.blit(log_surf, (draw_rect.x + 10, draw_rect.y + y_offset))
-                y_offset += 30
-                
-            input_surf = self.font.render(f"> {self.current_input}_", True, (0, 255, 0))
-            screen.blit(input_surf, (draw_rect.x + 10, draw_rect.bottom - 40))
+            self._draw_terminal(surface)
+        if self.dialogue_active:
+            self._draw_dialogue(surface)
+
+    # -- HUD -----------------------------------------------------------
+    def _draw_hud(self, surface, car_count, cars_needed, shift_over):
+        pad = 6
+        day_str  = f"DAY  {self.state_manager.day}"
+        car_str  = f"CARS {car_count:02d}/{cars_needed:02d}"
+        para_str = f"P: {int(self.state_manager.paranoia_float):03d}"
+        shift_str = "** SHIFT OVER **" if shift_over else "SHIFT IN PROGRESS"
+
+        for i, text in enumerate([day_str, car_str, para_str, shift_str]):
+            color = (0, 255, 80) if i < 3 else (255, 80, 80) if shift_over else (180, 180, 180)
+            surf = self.font_small.render(text, True, color)
+            surface.blit(surf, (pad, pad + i * 14))
+
+    # -- Terminal ------------------------------------------------------
+    def _draw_terminal(self, surface):
+        jx, jy = 0, 0
+        if self.state_manager.paranoia_float > 20:
+            t = min(15, int((self.state_manager.paranoia_float - 20) / 2))
+            jx, jy = random.randint(-t, t), random.randint(-t, t)
+        r = self.terminal_rect.move(jx, jy)
+
+        pygame.draw.rect(surface, (0, 0, 30), r)
+        pygame.draw.rect(surface, (0, 200, 60), r, 2)
+        hdr = self.font_large.render(
+            f"B4 PARKING LOG  DAY {self.state_manager.day}", True, (0, 255, 80))
+        surface.blit(hdr, (r.x + 5, r.y + 5))
+
+        y = r.y + 22
+        for log in self.logs[-(max(1,(r.height-40)//12)):]:
+            surface.blit(self.font_small.render("> " + log, True, (0, 220, 60)),
+                         (r.x + 5, y))
+            y += 12
+
+        inp = self.font_small.render(f"> {self.current_input}_", True, (0, 255, 80))
+        surface.blit(inp, (r.x + 5, r.bottom - 16))
+        tip = self.font_small.render("[TAB] CLOSE  [ENTER] SUBMIT", True, (60, 120, 60))
+        surface.blit(tip, (r.x + 5, r.bottom - 28))
+
+    # -- Dialogue box --------------------------------------------------
+    def _draw_dialogue(self, surface):
+        bw, bh = RENDER_W - 40, 18 * (len(self.dialogue_lines) + 1) + 12
+        bx = 20
+        by = RENDER_H - bh - 20
+        pygame.draw.rect(surface, (5, 5, 5), (bx, by, bw, bh))
+        pygame.draw.rect(surface, (180, 20, 20), (bx, by, bw, bh), 2)
+        for i, line in enumerate(self.dialogue_lines):
+            surf = self.font_large.render(line, True, (220, 50, 50))
+            surface.blit(surf, (bx + 8, by + 8 + i * 16))

@@ -25,17 +25,14 @@ class LightingManager:
     # RGB brightness of the ambient darkness layer per game state.
     # Higher = brighter (less dark).
     AMBIENT = {
-        'NORMAL':    (155, 155, 155),  # dim fluorescent glow — playable
-        'DECAY':     (70,  70,  70),   # oppressive, limited visibility
-        'NIGHTMARE': (18,  18,  18),   # near-total darkness
+        'NORMAL':    (155, 155, 155),
+        'DECAY':     (70,  70,  70),
+        'NIGHTMARE': (18,  18,  18),
     }
 
-    def __init__(self, width, height):
-        self.width  = width
-        self.height = height
-        # Regular surface — NO SRCALPHA flag
+    def __init__(self, width=RENDER_W, height=RENDER_H):
         self.darkness = pygame.Surface((width, height))
-        self.light_cache: dict[int, pygame.Surface] = {}
+        self.light_cache: dict = {}
 
     # ------------------------------------------------------------------
     def _get_light_mask(self, radius: int) -> pygame.Surface:
